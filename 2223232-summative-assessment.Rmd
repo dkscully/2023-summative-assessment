@@ -1,0 +1,27 @@
+---
+title: "2023 Summative Assessment"
+author: "Lesley Mitchell (2223232)"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(
+  echo       = FALSE,    # whether to show code chunks
+  message    = FALSE,    # whether to show messages from your code
+  warning    = FALSE,    # whether to show warnings from your code
+  fig.width  = 8,        # figure width in inches (at 96 dpi)
+  fig.height = 5,        # figure height in inches (at 96 dpi)
+  fig.align  = "center", # align figures to centre of page
+  out.width = "90%"      # figures/images span 50% of the page width
+)
+
+library(tidyverse)
+library(kableExtra)
+library(lubridate)
+library(ggthemes)
+library(viridisLite)  # for colourblind friendly colour palates
+
+```
+
