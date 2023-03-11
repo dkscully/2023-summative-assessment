@@ -21,10 +21,14 @@ knitr::opts_chunk$set(
 library(tidyverse)
 library(conflicted)   # makes conflicts between tidyverse and other packages explicit
 library(kableExtra)
-library(ggthemes)
-library(viridisLite)  # for colourblind friendly colour palates
+library(ggthemes)     # more ggplot themes
 library(forcats)      # useful factor tools
 library(scales)       # useful number formatting tools (e.g. adding commas, scaling, displaying currency)
+library(ggrepel)      # funky positioning for geom_text to avoid overlaps
+library(lemon)        # nicer facet options
+
+# Set random seed for ggrepel
+set.seed(42)
 
 # Set plot theme
 theme_set(theme_stata()) # default theme for plots
@@ -36,6 +40,8 @@ theme_set(theme_stata()) # default theme for plots
 owid_energy <- read_csv("data/owid-energy-data.csv")
 
 elec_access <- read_csv("data/number-of-people-with-and-without-electricity-access.csv")
+
+iso_codes <- read_csv("data/ISO_codes.csv")
 
 ```
 
@@ -53,6 +59,8 @@ elec_access <- read_csv("data/number-of-people-with-and-without-electricity-acce
 # renewables_electricity (all renewable sources, inc. solar, wind, biofuels and other)
 
 dfTotalElectricityOverTimeBySource <- owid_energy %>%
+  # Filter to world level data
+  dplyr::filter(country == "World") %>%
   select(fossil_electricity, nuclear_electricity, renewables_electricity) %>%
   summarise(Fossil = sum(fossil_electricity, na.rm = TRUE),
             Nuclear = sum(nuclear_electricity, na.rm = TRUE),
@@ -96,6 +104,8 @@ ggplot(dfTotalElectricityOverTimeBySource, mapping = aes(x = fct_rev(fct_reorder
 # year, primary_energy_consumption
 
 dfPrimaryEnergyConsumption <- owid_energy %>%
+  # Filter to world level data
+  dplyr::filter(country == "World") %>%
   select(year, primary_energy_consumption) %>%
   # Remove all the rows with no data
   na.omit() %>%
@@ -112,16 +122,84 @@ ggplot(dfPrimaryEnergyConsumption, mapping = aes(x = year, y = total)) +
     labs(title = "Total primary energy consumption per year",
        subtitle = "(Worldwide)",
        caption = "TWh = terawatt-hours (1,000,000MWh)",
-       alt = "Chart shows a line graph of total primary energy consumed (range: 163665.7 to 624430.5 terawatt-hours) plotted against year (range: 1965 - 2020), which generally increases from left to right, with a sharp decrease apparent in the final year.") +
+       alt = "Chart shows a line graph of total primary energy consumed (range: 43115.91 to 161530.75 terawatt-hours) plotted against year (range: 1965 - 2020), which generally increases from left to right, with a sharp decrease apparent in the final year.") +
   xlab(NULL) +
   ylab("Total electricity consumed (TWh)") +
   # Legibility fixes
-  # Make x axis lables ecery 5 years between min and max values
+  # Make x axis lables every 5 years between min and max values
   scale_x_continuous(breaks = seq(min(dfPrimaryEnergyConsumption$year), max(dfPrimaryEnergyConsumption$year),5)) +
   # Scale y axis values with suffix
   scale_y_continuous(labels = unit_format(unit = "K", scale = 1e-4, sep = "")) +
   # Rotate the tick values on the y axis
   theme(axis.text.y = element_text(angle = 0))
+
+```
+
+## Consumption per continent (1970 - 2020) from specific sources
+
+```{r consumption-per-continent-specific-sources }
+
+dfPerContinentPerSource <- owid_energy %>%
+  # filter for rows where year between 1970 and 2020
+  dplyr::filter(between(year,1970, 2020)) %>%
+  # Merge continents data with owid_energy data
+  left_join(iso_codes, by = c("iso_code" = "ISO_Code")) %>%
+  rename(continent = Continent) %>%
+  # Select useful columns
+  select(continent, year, coal_consumption, oil_consumption, gas_consumption,
+         nuclear_consumption, hydro_consumption, solar_consumption,
+         wind_consumption, biofuel_consumption) %>%
+  # filter for rows where continent is NA
+  dplyr::filter(!is.na(continent)) %>%
+  # replace all the NA data with 0 or the sum fails!!
+  replace(is.na(.), 0) %>%
+  group_by(continent, year) %>%
+  # Summarise all the consumption columns
+  summarise_all(sum) %>%
+  ungroup() %>%
+  pivot_longer(cols = ends_with("n"), names_to = "sources", values_to = "total") %>%
+  mutate(sources = fct_recode(sources, "Coal" = "coal_consumption", "Oil" = "oil_consumption",
+                              "Gas" = "gas_consumption", "Nuclear" = "nuclear_consumption",
+                              "Hydro" = "hydro_consumption", "Solar" = "solar_consumption",
+                              "Wind" ="wind_consumption", "Biofuel" = "biofuel_consumption"),
+         continent = fct_relevel(continent, "Africa", "Asia", "Europe", "North America",
+                                 "South America", "Oceania"))
+
+```
+
+```{r consumption-per-continent-specific-sources-graphs, fig.height=15}
+
+ggplot(dfPerContinentPerSource, mapping = aes(x = year, y = total)) +
+  geom_line(aes(color = fct_reorder2(sources, year, total))) +
+  facet_rep_wrap(vars(continent), ncol = 1, scales = "free_y",
+                 # Because this is a long set of graphs, add the year ticks to each one
+                 repeat.tick.labels = 'bottom') +
+  labs(title = "Consumption of electricity produced from specific sources",
+       subtitle = "By continent (1970 - 2020)",
+       caption = "1 TWh = 1,000,000 MWh") +
+  xlab(NULL) +
+  ylab("Total electricity consumed (TWh)") +
+  # Legibility fixes
+  # Rather than a legend label the axes (using the same colours as the lines)
+  geom_text_repel(aes(label = sources, color = fct_reorder2(sources, year, total)),
+                  data = dfPerContinentPerSource %>% dplyr::filter(year == 1970),
+                  hjust = "right", nudge_x = -3, direction = "y",
+                  size = 3) +
+  # Make x axis labels every 2 years between min and max values in the data
+  scale_x_continuous(breaks = seq(min(dfPerContinentPerSource$year),
+                                  max(dfPerContinentPerSource$year), 2)) +
+  # Scale y axis using a square root transform, to make small values more visible
+  # Format labels with commas
+  scale_y_sqrt(labels = comma) +
+  # Rotate the tick values on the x and y axes, and make the text a smidge smaller
+  theme(axis.text.y = element_text(angle = 0, size = 8),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 8),
+        # Add the x axis grid lines back (stata theme doesn't use them)
+        panel.grid.major.x = element_line(),
+        # Remove the legend (since the lines are labelled)
+        legend.position = "none") +
+  # Apply a colourblind friendly colour set
+  scale_color_viridis_d(option = "H")
 
 ```
 
