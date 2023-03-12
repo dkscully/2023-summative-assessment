@@ -27,7 +27,7 @@ library(scales)       # useful number formatting tools (e.g. adding commas, scal
 library(ggrepel)      # funky positioning for geom_text to avoid overlaps
 library(lemon)        # nicer facet options
 
-# Set random seed for ggrepel
+# Set random seed for ggrepel (for reproducibility)
 set.seed(42)
 
 # Set plot theme
@@ -128,8 +128,9 @@ ggplot(dfPrimaryEnergyConsumption, mapping = aes(x = year, y = total)) +
   # Legibility fixes
   # Make x axis lables every 5 years between min and max values
   scale_x_continuous(breaks = seq(min(dfPrimaryEnergyConsumption$year), max(dfPrimaryEnergyConsumption$year),5)) +
-  # Scale y axis values with suffix
-  scale_y_continuous(labels = unit_format(unit = "K", scale = 1e-4, sep = "")) +
+  # Scale y axis values with suffix and increase number of breaks
+  scale_y_continuous(labels = unit_format(unit = "K", scale = 1e-4, sep = ""),
+                     n.breaks = 8) +
   # Rotate the tick values on the y axis
   theme(axis.text.y = element_text(angle = 0))
 
@@ -138,6 +139,10 @@ ggplot(dfPrimaryEnergyConsumption, mapping = aes(x = year, y = total)) +
 ## Consumption per continent (1970 - 2020) from specific sources
 
 ```{r consumption-per-continent-specific-sources }
+
+# Focussing on human energy consumption from specific sources (i.e. coal, oil, gas, nuclear,
+# hydropower, solar, wind, and biofuel). How much energy has been consumed per continent
+# for each year between 1970 and 2020? Comment on the trends you observe.
 
 dfPerContinentPerSource <- owid_energy %>%
   # filter for rows where year between 1970 and 2020
@@ -155,9 +160,11 @@ dfPerContinentPerSource <- owid_energy %>%
   replace(is.na(.), 0) %>%
   group_by(continent, year) %>%
   # Summarise all the consumption columns
-  summarise_all(sum) %>%
+  summarise(across(where(is.numeric), sum)) %>%
   ungroup() %>%
+  # Make the data longer
   pivot_longer(cols = ends_with("n"), names_to = "sources", values_to = "total") %>%
+  # Factor and rename the sources data, convert the continents data to an ordered factor
   mutate(sources = fct_recode(sources, "Coal" = "coal_consumption", "Oil" = "oil_consumption",
                               "Gas" = "gas_consumption", "Nuclear" = "nuclear_consumption",
                               "Hydro" = "hydro_consumption", "Solar" = "solar_consumption",
@@ -180,9 +187,9 @@ ggplot(dfPerContinentPerSource, mapping = aes(x = year, y = total)) +
   xlab(NULL) +
   ylab("Total electricity consumed (TWh)") +
   # Legibility fixes
-  # Rather than a legend label the axes (using the same colours as the lines)
+  # Rather than a legend label the lines (using the same colours as the lines)
   geom_text_repel(aes(label = sources, color = fct_reorder2(sources, year, total)),
-                  data = dfPerContinentPerSource %>% dplyr::filter(year == 1970),
+                  data = subset(dfPerContinentPerSource, year == 1970),
                   hjust = "right", nudge_x = -3, direction = "y",
                   size = 3) +
   # Make x axis labels every 2 years between min and max values in the data
@@ -200,6 +207,82 @@ ggplot(dfPerContinentPerSource, mapping = aes(x = year, y = total)) +
         legend.position = "none") +
   # Apply a colourblind friendly colour set
   scale_color_viridis_d(option = "H")
+
+```
+
+## Electricity access for different income levels
+
+```{r electricity-access-income }
+# What is the percentage of people with/ without electricity access for different income
+# categories? Comment on the trends for each year between 1990 and 2019, and focus on
+# income categories labelled High income, Upper middle income, Lower middle income, and
+# Low income.
+
+# Discussion of data here: https://ourworldindata.org/energy-access
+# World Bank defined income levels change each year (adjusted for inflation) and countries included do too
+# Based on Gross National Income (GNI) per capita
+# e.g. for 2020-2021 - 
+#   https://blogs.worldbank.org/opendata/new-world-bank-country-classifications-income-level-2020-2021
+# Historical classification spreadsheet here - 
+#   https://datacatalogfiles.worldbank.org/ddh-published/0037712/DR0090754/OGHIST.xlsx
+
+dfElectricityAccessIncome <- elec_access %>%
+  select(!Code) %>%
+  dplyr::filter(Entity %in% c("High income", "Upper middle income", "Lower middle income", "Low income") &
+                  between(Year, 1990, 2019)) %>%
+  rename("income_level" = "Entity", "year" = "Year",
+         "with_access" = "Number of people with access to electricity",
+         "without_access" = "Number of people without access to electricity") %>%
+  # Summarise across years as percentage
+  group_by(income_level, year) %>%
+  mutate(pct_with = round(100 * with_access / sum(with_access, without_access), digits = 2),
+         pct_without = round(100 * without_access / sum(with_access, without_access), digits = 2)) %>%
+  ungroup() %>%
+  # Make income_levels an ordered factor and add some formatting
+  mutate(income_level = fct_recode(income_level, "High\nincome" = "High income",
+                                   "Upper\n middle\nincome" = "Upper middle income",
+                                   "Lower\n middle\nincome" = "Lower middle income",
+                                   "Low\nincome" = "Low income"))
+
+
+```
+
+```{r electricity-access-income-chart }
+
+ggplot(dfElectricityAccessIncome, mapping = aes(x = year, y = pct_without, label = pct_without)) +
+  geom_line(aes(color = income_level)) +
+  geom_point(aes(color = income_level)) +
+  labs(title = "Percentage population without electricity access",
+       subtitle = "By World Bank Income Level (1990 - 2019)",
+       caption = "Value for high income countries declines from 0.12% to 0 across the time period") +
+  xlab(NULL) +
+  ylab("percent") +
+  # Legibility fixes
+  # Add values to each point
+  geom_text_repel(data = subset(dfElectricityAccessIncome, pct_without > 0.5),
+                  hjust = "left",
+                  direction = "both",
+                  size = 2) +
+  # Rather than a legend label the lines (using the same colours as the lines)
+  geom_text_repel(data = subset(dfElectricityAccessIncome, year == 2019),
+                  aes(label = income_level, color = income_level),
+                  hjust = "right",
+                  nudge_x = 4,
+                  direction = "y",
+                  size = 3) +
+  # Make x axis labels every 1 year between min and max values in the data
+  scale_x_continuous(breaks = seq(min(dfElectricityAccessIncome$year),
+                                  max(dfElectricityAccessIncome$year), 1)) +
+  # Format labels with commas
+  scale_y_sqrt(labels = comma) +
+  # Rotate the tick values on the x and y axes, and make the text a smidge smaller
+  theme(axis.text.y = element_text(angle = 0, size = 8),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 8),
+        # Remove the legend (since the lines are labelled)
+        legend.position = "none") +
+  # Apply a colourblind friendly colour set
+  scale_color_viridis_d(option = "H") +
+  scale_fill_viridis_d(option = "H")
 
 ```
 
