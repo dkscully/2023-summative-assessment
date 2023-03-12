@@ -2,7 +2,18 @@
 title: "2023 Summative Assessment"
 author: "Lesley Mitchell (2223232)"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  html_document:
+    df_print: paged
+    theme: 
+      version: 4
+      bootswatch: lux
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    toc_depth: 3
+    number_sections: false
 ---
 
 ```{r setup, include=FALSE}
