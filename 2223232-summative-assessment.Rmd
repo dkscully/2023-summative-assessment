@@ -142,7 +142,18 @@ dfTotalElectricityOverTimeBySource %>%
 
 ```
 
+<<<<<<< HEAD
 ## Trends in primary energy consumption
+=======
+```{r highest-alltime-production-table }
+
+kable(dfTotalElectricityOverTimeBySource)
+
+```
+
+
+## Primary energy consumption changed across time
+>>>>>>> 4918049ad97c6f0c4c5fbb1b71d6f4fe0ad83637
 
 ```{r energy-consumption-over-time }
 
