@@ -104,6 +104,13 @@ ggplot(dfTotalElectricityOverTimeBySource, mapping = aes(x = fct_rev(fct_reorder
 
 ```
 
+```{r highest-alltime-production-table }
+
+kable(dfTotalElectricityOverTimeBySource)
+
+```
+
+
 ## Primary energy consumption changed across time
 
 ```{r energy-consumption-over-time }
